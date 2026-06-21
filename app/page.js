@@ -349,6 +349,7 @@ export default function Home() {
   // Chat
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMinimized, setChatMinimized] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
@@ -715,7 +716,7 @@ export default function Home() {
 
       {/* ---------- HEADER ---------- */}
       <header className="app-header lg-glass-strong" style={{ flexWrap: "wrap", rowGap: 8 }}>
-        <div className="logo-wrap" style={{ marginRight: 10 }}>
+        <div className="logo-halo" style={{ marginRight: 10 }}>
           <img
           className="logo-img"
           src="/walrus/logo.png"
@@ -1421,13 +1422,16 @@ export default function Home() {
         <img src="/walrus/2.png" alt="Scout" className="scout-mini" onClick={() => setChatMinimized(false)} />
       )}
       {chatVisible && (
-        <div className="lg-glass-strong" style={{ position: "fixed", top: 100, bottom: 28, right: 28, zIndex: 3500, width: "90%", maxWidth: 400, borderRadius: 26, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="lg-glass-strong" style={chatExpanded ? { position: "fixed", top: 80, bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 3500, width: "94%", maxWidth: 880, borderRadius: 26, display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1019" } : { position: "fixed", top: 100, bottom: 28, right: 28, zIndex: 3500, width: "90%", maxWidth: 400, borderRadius: 26, display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1019" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: "1px solid var(--glass-border)" }}>
             <img src="/walrus/2.png" alt="Scout" style={{ width: 42, height: 42, objectFit: "contain" }} />
             <div style={{ flex: 1 }}>
               <p className="worldcup-font" style={{ color: "var(--gold)", fontSize: 14, textTransform: "uppercase" }}>The Scout</p>
               <p style={{ color: "var(--text-dim)", fontSize: 12 }}>Your tactical advisor</p>
             </div>
+            <button onClick={() => setChatExpanded((v) => !v)} title={chatExpanded ? "Shrink" : "Expand"} style={{ color: "var(--text-dim)", background: "rgba(255,255,255,0.08)", border: "none", fontSize: 14, cursor: "pointer", width: 30, height: 30, borderRadius: "50%" }}>
+              {chatExpanded ? "⤡" : "⤢"}
+            </button>
             <button onClick={() => setChatMinimized(true)} style={{ color: "var(--text-dim)", background: "rgba(255,255,255,0.08)", border: "none", fontSize: 15, cursor: "pointer", width: 30, height: 30, borderRadius: "50%" }}>—</button>
             <button onClick={() => { setChatOpen(false); setChatMinimized(false); }} style={{ color: "var(--text-dim)", background: "rgba(255,255,255,0.08)", border: "none", fontSize: 13, cursor: "pointer", width: 30, height: 30, borderRadius: "50%" }}>✕</button>
           </div>
