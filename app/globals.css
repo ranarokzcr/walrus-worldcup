@@ -26,6 +26,12 @@ body {
   color: var(--text);
   font-family: "Plus Jakarta Sans", sans-serif;
   overflow-x: hidden;
+  caret-color: transparent;
+}
+
+/* Caret only visible where you actually type */
+input, textarea, [contenteditable] {
+  caret-color: auto;
 }
 
 .worldcup-font {
@@ -270,6 +276,49 @@ background: rgba(13, 16, 25, 0.92);
   filter: drop-shadow(0 8px 24px rgba(0,0,0,0.6));
 }
 .scout-mini:hover { transform: scale(1.08); }
+
+/* ===== Scout floating icon + unread badge ===== */
+.scout-mini-wrap {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 3500;
+  width: 68px;
+  height: 68px;
+  cursor: pointer;
+}
+.scout-mini-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.6));
+}
+.scout-mini-wrap:hover .scout-mini-img { transform: scale(1.08); }
+.scout-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ff3b5c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px #0d1019, 0 4px 10px rgba(0,0,0,0.5);
+  animation: badge-pop 0.3s ease-out;
+}
+@keyframes badge-pop {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
 
 /* ---------- Chat ---------- */
 @keyframes msg-in {
@@ -681,4 +730,57 @@ background: rgba(13, 16, 25, 0.92);
 }
 .results-tab.active {
   color: #0b0e16;
+}
+/* ===== Mobile: compact header / nav ===== */
+@media (max-width: 768px) {
+  .app-header {
+    width: calc(100% - 16px) !important;
+    top: 8px !important;
+    padding: 8px 10px !important;
+    gap: 4px !important;
+    border-radius: 16px !important;
+  }
+  /* smaller logo */
+  .logo-img { height: 40px !important; }
+  .logo-halo { margin-right: 4px !important; }
+  /* tighter nav buttons */
+  .nav-link {
+    padding: 7px 10px !important;
+    font-size: 13px !important;
+    border-radius: 9px !important;
+  }
+  /* main content: less top padding since header is shorter */
+  main { padding-top: 230px !important; }
+  /* nav wraps to multiple rows instead of horizontal scroll */
+  .app-header nav {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    overflow-x: visible !important;
+    gap: 4px !important;
+    row-gap: 6px !important;
+  }
+  /* Results tab: drop the spinning neon on mobile (cleaner, no clipping) */
+  .results-tab::before { display: none !important; }
+  .results-tab::after { display: none !important; }
+  .results-tab {
+    border: 1px solid var(--gold-border) !important;
+    background: transparent !important;
+  }
+  .results-tab.active {
+    background: var(--gold) !important;
+    color: #0b0e16 !important;
+  }
+}
+
+/* ===== Very small phones ===== */
+@media (max-width: 460px) {
+  .nav-link { padding: 6px 8px !important; font-size: 12px !important; }
+  .logo-img { height: 34px !important; }
+}
+/* ===== Nav: desktop inline vs mobile hamburger ===== */
+.nav-desktop { display: flex; }
+.nav-mobile { display: none; }
+@media (max-width: 768px) {
+  .nav-desktop { display: none !important; }
+  .nav-mobile { display: flex !important; }
 }

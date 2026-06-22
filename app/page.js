@@ -322,6 +322,7 @@ export default function Home() {
   const [userEmail, setUserEmail] = useState("");
   const [lastBlobId, setLastBlobId] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
 
   const [page, setPage] = useState("home"); // home | matches | groups | knockout | predictions
   const [activeDay, setActiveDay] = useState("12/06");
@@ -353,7 +354,9 @@ export default function Home() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
   const chatEndRef = useRef(null);
+  const chatVisibleRef = useRef(false);
 
   const [nextMatch, setNextMatch] = useState(null);
   const [todayMatches, setTodayMatches] = useState(null);
@@ -403,6 +406,22 @@ export default function Home() {
     }, 50);
     return () => clearTimeout(t);
   }, [chatMessages, chatLoading]);
+
+  // Keep a live ref of chat visibility; clear the unread badge when chat is open
+  useEffect(() => {
+    const visible = chatOpen && !chatMinimized;
+    chatVisibleRef.current = visible;
+    if (visible) setHasUnread(false);
+  }, [chatOpen, chatMinimized]);
+  // Inject the scout-wiggle keyframes into <head> once (no stray <style> in the body)
+  useEffect(() => {
+    const id = "scout-wiggle-keyframes";
+    if (document.getElementById(id)) return;
+    const el = document.createElement("style");
+    el.id = id;
+    el.textContent = `@keyframes scout-wiggle { 0%,100% { transform: rotate(0deg); } 3% { transform: rotate(-7deg); } 8% { transform: rotate(6deg); } 13% { transform: rotate(-4deg); } 18% { transform: rotate(3deg); } 23% { transform: rotate(0deg); } }`;
+    document.head.appendChild(el);
+  }, []);
 
   // Restore session + predictions; compute next match (refresh every minute)
   useEffect(() => {
@@ -626,6 +645,7 @@ export default function Home() {
     } catch (e) {
       setChatMessages([...newMsgs, { role: "assistant", content: "The Scout dropped his clipboard. Try again." }]);
     }
+    if (!chatVisibleRef.current) setHasUnread(true);
     setChatLoading(false);
   };
 
@@ -710,6 +730,7 @@ export default function Home() {
         </div>
       )}
 
+
       {/* ---------- MASCOTS ---------- */}
       <img src="/walrus/bicycle-kick.png" alt="" className="page-mascot-bicycle" />
       <img src="/walrus/kick.png" alt="" className="page-mascot-kick" />
@@ -727,7 +748,8 @@ export default function Home() {
           onMouseLeave={(e) => (e.target.style.transform = "scale(1) rotate(0)")}
         />
         </div>
-        <nav style={{ display: "flex", flex: 1, justifyContent: "space-evenly", overflowX: "auto" }} className="no-scrollbar">
+        {/* Desktop nav (inline) */}
+        <nav className="nav-desktop" style={{ flex: 1, justifyContent: "space-evenly", overflowX: "auto" }}>
           {[
             { id: "home", label: "Home" },
             { id: "matches", label: "Matches" },
@@ -735,13 +757,41 @@ export default function Home() {
             { id: "knockout", label: "Knockout" },
             { id: "results", label: "Results" },
             { id: "predictions", label: "My Predictions" },
-            
           ].map((item) => (
             <button key={item.id} className={`nav-link ${page === item.id ? "active" : ""} ${item.id === "results" ? "results-tab" : ""}`} onClick={() => setPage(item.id)}>
               {item.label}
             </button>
           ))}
         </nav>
+
+        {/* Mobile nav (hamburger) */}
+        <div className="nav-mobile" style={{ position: "relative", flex: 1, justifyContent: "flex-end" }}>
+          <button onClick={() => setNavMenuOpen((v) => !v)} className="nav-link" style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--glass-border)" }}>
+            <span style={{ fontSize: 18, lineHeight: 1 }}>☰</span>
+            <span style={{ fontSize: 13, fontWeight: 800 }}>Menu</span>
+          </button>
+          {navMenuOpen && (
+            <div className="lg-glass-strong" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, borderRadius: 16, padding: 8, minWidth: 200, zIndex: 1200, display: "flex", flexDirection: "column", gap: 2 }}>
+              {[
+                { id: "home", label: "Home" },
+                { id: "matches", label: "Matches" },
+                { id: "groups", label: "Groups" },
+                { id: "knockout", label: "Knockout" },
+                { id: "results", label: "Results" },
+                { id: "predictions", label: "My Predictions" },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  className={`nav-link ${page === item.id ? "active" : ""}`}
+                  style={{ width: "100%", textAlign: "left" }}
+                  onClick={() => { setPage(item.id); setNavMenuOpen(false); }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Ticker (clickable) + picks badge */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", order: 10, justifyContent: "center", paddingTop: 4, borderTop: "1px solid var(--glass-border)" }}>
@@ -1414,12 +1464,30 @@ export default function Home() {
 
       {/* ---------- PERSISTENT SCOUT ---------- */}
       {!walrus && !chatOpen && (
-        <img src="/walrus/2.png" alt="Scout" className="scout-mini" onClick={() => { setChatOpen(true); setChatMinimized(false); }} />
+        <div
+          className="scout-mini-wrap"
+          onClick={() => { setChatOpen(true); setChatMinimized(false); }}
+          style={{ position: "fixed", bottom: 28, right: 28, left: "auto", zIndex: 3500, width: 84, height: 84, cursor: "pointer", transformOrigin: "bottom center", animation: hasUnread ? "scout-wiggle 2.2s ease-in-out infinite" : "none" }}
+        >
+          <img src="/walrus/2.png" alt="Scout" style={{ width: "100%", height: "100%", objectFit: "contain", filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.6))" }} />
+          {hasUnread && (
+            <span style={{ position: "absolute", top: -2, right: -2, minWidth: 22, height: 22, padding: "0 6px", borderRadius: 999, background: "#ff3b5c", color: "#fff", fontSize: 12, fontWeight: 800, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 2px #0d1019, 0 4px 10px rgba(0,0,0,0.5)" }}>1</span>
+          )}
+        </div>
       )}
 
       {/* ---------- CHAT ---------- */}
       {chatOpen && chatMinimized && (
-        <img src="/walrus/2.png" alt="Scout" className="scout-mini" onClick={() => setChatMinimized(false)} />
+        <div
+          className="scout-mini-wrap"
+          onClick={() => setChatMinimized(false)}
+          style={{ position: "fixed", bottom: 28, right: 28, left: "auto", zIndex: 3500, width: 84, height: 84, cursor: "pointer", transformOrigin: "bottom center", animation: hasUnread ? "scout-wiggle 2.2s ease-in-out infinite" : "none" }}
+        >
+          <img src="/walrus/2.png" alt="Scout" style={{ width: "100%", height: "100%", objectFit: "contain", filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.6))" }} />
+          {hasUnread && (
+            <span style={{ position: "absolute", top: -2, right: -2, minWidth: 22, height: 22, padding: "0 6px", borderRadius: 999, background: "#ff3b5c", color: "#fff", fontSize: 12, fontWeight: 800, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 2px #0d1019, 0 4px 10px rgba(0,0,0,0.5)" }}>1</span>
+          )}
+        </div>
       )}
       {chatVisible && (
         <div className="lg-glass-strong" style={chatExpanded ? { position: "fixed", top: 80, bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 3500, width: "94%", maxWidth: 880, borderRadius: 26, display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1019" } : { position: "fixed", top: 100, bottom: 28, right: 28, zIndex: 3500, width: "90%", maxWidth: 400, borderRadius: 26, display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1019" }}>
