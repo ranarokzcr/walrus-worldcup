@@ -288,16 +288,33 @@ const isLocked = (day, t) => Date.now() >= kickoffDate(day, t).getTime() + VOTE_
 const findTodayMatches = () => {
   const now = new Date();
   const todayUTC = `${String(now.getUTCDate()).padStart(2, "0")}/${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  // Our data keys are VN-time dates; match by converting each match to its UTC calendar day
+  // Our data keys are VN-time dates; gather every match whose UTC calendar day is today,
+  // across all date buckets (a VN day can split across two UTC days)
+  let collected = [];
   for (const day of Object.keys(matchDays)) {
-    const list = matchDays[day].filter((m) => {
+    matchDays[day].forEach((m) => {
       const d = kickoffDate(day, m.t);
       const mDay = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-      return mDay === todayUTC;
+      if (mDay === todayUTC) collected.push({ ...m, day, _kick: d.getTime() });
     });
-    if (list.length > 0) return { day, list };
   }
-  return null;
+  if (collected.length === 0) return null;
+  // Sort: live first, then upcoming (soonest first), then finished (latest first)
+  const rank = (m) => {
+    const ko = m._kick;
+    const nowMs = Date.now();
+    if (nowMs >= ko && nowMs < ko + 120 * 60 * 1000) return 0; // roughly in-play window (~2h)
+    if (ko > nowMs) return 1;                                   // not started yet
+    return 2;                                                   // finished
+  };
+  collected.sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 1) return a._kick - b._kick; // upcoming: soonest first
+    return b._kick - a._kick;               // live/finished: most recent first
+  });
+  // keep the original shape: { day, list }
+  return { day: collected[0].day, list: collected };
 };
 // Find the next upcoming match (first match whose kickoff is in the future)
 const findNextMatch = () => {
@@ -379,7 +396,7 @@ export default function Home() {
 
   // Match our local data to an API fixture by team names (with aliases)
   // football-data.org may use different team names — match against both short and full names
-  const NAME_ALIAS = { "South Korea": "Korea Republic", "Czechia": "Czech Republic", "Türkiye": "Turkey", "Bosnia": "Bosnia and Herzegovina", "DR Congo": "Congo DR", "USA": "United States", "Ivory Coast": "Côte d'Ivoire" };
+  const NAME_ALIAS = { "South Korea": "Korea Republic", "Czechia": "Czech Republic", "Türkiye": "Turkey", "Bosnia": "Bosnia and Herzegovina", "DR Congo": "Congo DR", "USA": "United States", "Ivory Coast": "Côte d'Ivoire", "Cabo Verde": "Cape Verde" };
   const matchTeam = (apiF, ours) =>
     apiF === ours || apiF === NAME_ALIAS[ours] ||
     (apiF || "").toLowerCase().includes(ours.toLowerCase());

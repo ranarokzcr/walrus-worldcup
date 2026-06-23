@@ -725,11 +725,11 @@ background: rgba(13, 16, 25, 0.92);
   background: #0d1019;
   border-radius: 10px;
 }
-.results-tab.active::after {
-  background: var(--gold);
-}
+.results-tab.active::before { display: none; }
+.results-tab.active::after { display: none; }
 .results-tab.active {
-  color: #0b0e16;
+  background: var(--gold) !important;
+  color: #0b0e16 !important;
 }
 /* ===== Mobile: compact header / nav ===== */
 @media (max-width: 768px) {

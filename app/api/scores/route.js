@@ -5,9 +5,9 @@ const BASE = "https://api.football-data.org/v4";
 
 // Smart cache (free tier: 10 calls/min, plenty — but be polite):
 // - While at least one match is live -> refresh every 3 minutes
-// - Otherwise                        -> refresh every 60 minutes
+// - Otherwise                        -> refresh every 5 minutes (catch newly-started matches)
 const TTL_LIVE = 3 * 60 * 1000;
-const TTL_IDLE = 60 * 60 * 1000;
+const TTL_IDLE = 5 * 60 * 1000;
 
 const LIVE_STATUSES = ["IN_PLAY", "PAUSED"];
 
