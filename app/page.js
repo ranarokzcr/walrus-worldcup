@@ -773,7 +773,7 @@ export default function Home() {
           src="/walrus/logo.png"
           alt="Home"
           onClick={() => setPage("home")}
-          style={{ height: 60, cursor: "pointer", marginRight: 10, transition: "transform 0.25s" }}
+          style={{ height: 80, cursor: "pointer", marginRight: 10, transition: "transform 0.25s" }}
           onMouseEnter={(e) => (e.target.style.transform = "scale(1.1) rotate(-5deg)")}
           onMouseLeave={(e) => (e.target.style.transform = "scale(1) rotate(0)")}
         />
@@ -1412,7 +1412,7 @@ export default function Home() {
           {/* Left: brand + quote + stamp */}
          <div style={{ flex: "1 1 320px", padding: "32px 28px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-              <img src="/walrus/logo.png" alt="" style={{ height: 72 }} />
+              <img src="/walrus/logo.png" alt="" style={{ height: 85 }} />
               <span className="worldcup-font" style={{ fontSize: 22, color: "var(--gold)" }}>The Scout</span>
             </div>
             <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 26, fontWeight: 600, lineHeight: 1.4, color: "#f4f6fb", margin: "0 0 22px", maxWidth: 330 }}>
