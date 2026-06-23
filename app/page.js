@@ -649,6 +649,36 @@ export default function Home() {
     setChatLoading(false);
   };
 
+  // ---- Compute group standings from finished API matches ----
+  const computeStandings = (groupId) => {
+    const code = `GROUP_${groupId}`;
+    // start every team in this group at zero
+    const table = {};
+    groupTeams[groupId].forEach((t) => {
+      table[t.n] = { name: t.n, c: t.c, P: 0, W: 0, D: 0, L: 0, GF: 0, GA: 0, GD: 0, Pts: 0 };
+    });
+    // walk finished matches that belong to this group
+    liveScores
+      .filter((f) => f.status === "FINISHED" && f.group === code)
+      .forEach((f) => {
+        // map API team names back to our local names
+        const homeT = groupTeams[groupId].find((t) => matchTeam(f.home, t.n) || matchTeam(f.homeFull, t.n));
+        const awayT = groupTeams[groupId].find((t) => matchTeam(f.away, t.n) || matchTeam(f.awayFull, t.n));
+        if (!homeT || !awayT) return;
+        const h = table[homeT.n], a = table[awayT.n];
+        const gh = f.goalsHome ?? 0, ga = f.goalsAway ?? 0;
+        h.P++; a.P++;
+        h.GF += gh; h.GA += ga;
+        a.GF += ga; a.GA += gh;
+        if (gh > ga) { h.W++; h.Pts += 3; a.L++; }
+        else if (gh < ga) { a.W++; a.Pts += 3; h.L++; }
+        else { h.D++; a.D++; h.Pts++; a.Pts++; }
+      });
+    // finalize GD and sort: Pts → GD → GF
+    return Object.values(table)
+      .map((r) => ({ ...r, GD: r.GF - r.GA }))
+      .sort((x, y) => y.Pts - x.Pts || y.GD - x.GD || y.GF - x.GF);
+  };
   const getTeamMatches = (teamName) => {
     const res = [];
     for (const day in matchDays) {
@@ -1075,6 +1105,72 @@ export default function Home() {
                 );
               })}
             </div>
+
+            {/* ===== STANDINGS TABLE ===== */}
+            {(() => {
+              const rows = computeStandings(activeGroup);
+              const played = rows.some((r) => r.P > 0);
+              return (
+                <div style={{ marginTop: 32 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: "var(--gold)" }}>
+                    Group {activeGroup} Standings
+                  </h2>
+                  {!played ? (
+                    <div className="lg-glass" style={{ borderRadius: 16, padding: 20, color: "var(--text-dim)", fontSize: 13 }}>
+                      No matches played yet in this group.
+                    </div>
+                  ) : (
+                    <div className="lg-glass no-scrollbar" style={{ borderRadius: 18, padding: "6px 4px", overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+                        <thead>
+                          <tr style={{ color: "var(--text-dim)", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                            <th style={{ textAlign: "left", padding: "10px 8px 10px 14px" }}>#</th>
+                            <th style={{ textAlign: "left", padding: "10px 8px" }}>Team</th>
+                            <th style={{ textAlign: "center", padding: "10px 6px" }}>P</th>
+                            <th style={{ textAlign: "center", padding: "10px 6px" }}>W</th>
+                            <th style={{ textAlign: "center", padding: "10px 6px" }}>D</th>
+                            <th style={{ textAlign: "center", padding: "10px 6px" }}>L</th>
+                            <th style={{ textAlign: "center", padding: "10px 6px" }}>GF</th>
+                            <th style={{ textAlign: "center", padding: "10px 6px" }}>GA</th>
+                            <th style={{ textAlign: "center", padding: "10px 6px" }}>GD</th>
+                            <th style={{ textAlign: "center", padding: "10px 14px 10px 6px", color: "var(--gold)" }}>Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r, i) => {
+                            const top2 = i < 2;
+                            return (
+                              <tr key={r.name} style={{ borderTop: "1px solid var(--glass-border)", background: top2 ? "rgba(212,175,55,0.06)" : "transparent" }}>
+                                <td style={{ padding: "11px 8px 11px 14px", fontSize: 13, fontWeight: 800, color: top2 ? "var(--gold)" : "var(--text-dim)" }}>{i + 1}</td>
+                                <td style={{ padding: "11px 8px" }}>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                                    <img src={flagUrl(r.c)} alt="" style={{ width: 24, height: 16, borderRadius: 3, objectFit: "cover" }} />
+                                    <span style={{ fontSize: 13, fontWeight: 700 }}>{r.name}</span>
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "center", padding: "11px 6px", fontSize: 13, color: "var(--text-dim)" }}>{r.P}</td>
+                                <td style={{ textAlign: "center", padding: "11px 6px", fontSize: 13 }}>{r.W}</td>
+                                <td style={{ textAlign: "center", padding: "11px 6px", fontSize: 13 }}>{r.D}</td>
+                                <td style={{ textAlign: "center", padding: "11px 6px", fontSize: 13 }}>{r.L}</td>
+                                <td style={{ textAlign: "center", padding: "11px 6px", fontSize: 13, color: "var(--text-dim)" }}>{r.GF}</td>
+                                <td style={{ textAlign: "center", padding: "11px 6px", fontSize: 13, color: "var(--text-dim)" }}>{r.GA}</td>
+                                <td style={{ textAlign: "center", padding: "11px 6px", fontSize: 13, fontWeight: 700, color: r.GD > 0 ? "#39ff14" : r.GD < 0 ? "#ff6b6b" : "var(--text-dim)" }}>
+                                  {r.GD > 0 ? `+${r.GD}` : r.GD}
+                                </td>
+                                <td style={{ textAlign: "center", padding: "11px 14px 11px 6px", fontSize: 15, fontWeight: 800, color: "var(--gold)" }}>{r.Pts}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <p style={{ fontSize: 11, color: "var(--text-dim)", padding: "8px 14px 6px", opacity: 0.7 }}>
+                        Top 2 advance · sorted by points, then goal difference
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </section>
         )}
 
