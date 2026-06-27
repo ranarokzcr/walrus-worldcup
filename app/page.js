@@ -192,22 +192,22 @@ const matchDays = {
 
 const knockoutData = {
   "Round of 32": [
-    { t: 73, d: "29/06", g: "02:00", h: "Winner Group A", a: "Runner-up Group B" },
-    { t: 74, d: "30/06", g: "00:00", h: "Winner Group C", a: "Runner-up Group F" },
-    { t: 75, d: "30/06", g: "03:30", h: "Winner Group E", a: "3rd Place ABCDF" },
-    { t: 76, d: "30/06", g: "08:00", h: "Winner Group F", a: "Runner-up Group C" },
-    { t: 77, d: "01/07", g: "00:00", h: "Runner-up Group E", a: "Winner Group I" },
-    { t: 78, d: "01/07", g: "04:00", h: "Winner Group I", a: "3rd Place CDFGH" },
+    { t: 73, d: "29/06", g: "02:00", h: "Runner-up Group A", a: "Runner-up Group B" },
+    { t: 74, d: "30/06", g: "03:30", h: "Winner Group E", a: "3rd Place ABCDF" },
+    { t: 75, d: "30/06", g: "08:00", h: "Winner Group F", a: "Runner-up Group C" },
+    { t: 76, d: "30/06", g: "00:00", h: "Winner Group C", a: "Runner-up Group F" },
+    { t: 77, d: "01/07", g: "04:00", h: "Winner Group I", a: "3rd Place CDFGH" },
+    { t: 78, d: "01/07", g: "00:00", h: "Runner-up Group E", a: "Runner-up Group I" },
     { t: 79, d: "01/07", g: "08:00", h: "Winner Group A", a: "3rd Place CEFHI" },
     { t: 80, d: "01/07", g: "23:00", h: "Winner Group L", a: "3rd Place EHIJK" },
-    { t: 81, d: "02/07", g: "03:00", h: "Winner Group G", a: "3rd Place AEHIJ" },
-    { t: 82, d: "02/07", g: "07:00", h: "Winner Group D", a: "3rd Place BEFIJ" },
-    { t: 83, d: "03/07", g: "02:00", h: "Winner Group H", a: "Runner-up Group J" },
-    { t: 84, d: "03/07", g: "06:00", h: "Runner-up Group K", a: "Runner-up Group L" },
+    { t: 81, d: "02/07", g: "07:00", h: "Winner Group D", a: "3rd Place BEFIJ" },
+    { t: 82, d: "02/07", g: "03:00", h: "Winner Group G", a: "3rd Place AEHIJ" },
+    { t: 83, d: "03/07", g: "06:00", h: "Runner-up Group K", a: "Runner-up Group L" },
+    { t: 84, d: "03/07", g: "02:00", h: "Winner Group H", a: "Runner-up Group J" },
     { t: 85, d: "03/07", g: "10:00", h: "Winner Group B", a: "3rd Place EFGIJ" },
-    { t: 86, d: "04/07", g: "01:00", h: "Runner-up Group D", a: "Runner-up Group G" },
-    { t: 87, d: "04/07", g: "05:00", h: "Winner Group J", a: "Runner-up Group H" },
-    { t: 88, d: "04/07", g: "08:30", h: "Winner Group K", a: "3rd Place DEIJL" },
+    { t: 86, d: "04/07", g: "05:00", h: "Winner Group J", a: "Runner-up Group H" },
+    { t: 87, d: "04/07", g: "08:30", h: "Winner Group K", a: "3rd Place DEIJL" },
+    { t: 88, d: "04/07", g: "01:00", h: "Runner-up Group D", a: "Runner-up Group G" },
   ],
   "Round of 16": [
     { t: 89, d: "05/07", g: "00:00", h: "Winner Match 73", a: "Winner Match 75" },
@@ -345,6 +345,7 @@ export default function Home() {
   const [activeDay, setActiveDay] = useState("12/06");
   const [activeGroup, setActiveGroup] = useState("A");
   const [activeKnockout, setActiveKnockout] = useState("Round of 32");
+  const [koView, setKoView] = useState("list"); // "list" | "bracket"
   const [resultsMonth, setResultsMonth] = useState("all");
   const [showGroups, setShowGroups] = useState(false);
   const [resultsDay, setResultsDay] = useState("all");
@@ -695,6 +696,183 @@ export default function Home() {
     return Object.values(table)
       .map((r) => ({ ...r, GD: r.GF - r.GA }))
       .sort((x, y) => y.Pts - x.Pts || y.GD - x.GD || y.GF - x.GF);
+  };
+  // ---- Knockout: resolve group-based slots into real teams ----
+  // A group is "done" only when all 6 of its matches are FINISHED.
+  const groupFinished = (groupId) => {
+    const code = `GROUP_${groupId}`;
+    return liveScores.filter((f) => f.status === "FINISHED" && f.group === code).length >= 6;
+  };
+  // Tiebreak across groups: points -> goal diff -> goals for -> name
+  const rankCompareTeams = (a, b) =>
+    b.Pts - a.Pts || b.GD - a.GD || b.GF - a.GF || a.name.localeCompare(b.name);
+  // Assign the 8 best third-placed teams to the 8 "3rd Place XXXXX" R32 slots
+  // via backtracking: each qualified group goes to a slot whose letters contain it.
+  const buildThirdMap = () => {
+    const groups = Object.keys(groupTeams);
+    if (!groups.every(groupFinished)) return {};
+    const thirds = groups.map((g) => ({ g, team: computeStandings(g)[2] }));
+    thirds.sort((a, b) => rankCompareTeams(a.team, b.team));
+    const qualified = thirds.slice(0, 8).map((x) => x.g);
+
+    const slots = (knockoutData["Round of 32"] || [])
+      .flatMap((mt) => [mt.h, mt.a])
+      .filter((l) => l.startsWith("3rd Place"))
+      .map((l) => ({ label: l, allowed: l.replace("3rd Place ", "").split("") }));
+
+    const map = {};
+    const used = new Set();
+    const assign = (i) => {
+      if (i === slots.length) return true;
+      for (const g of qualified) {
+        if (!used.has(g) && slots[i].allowed.includes(g)) {
+          used.add(g);
+          map[slots[i].label] = g;
+          if (assign(i + 1)) return true;
+          used.delete(g);
+          delete map[slots[i].label];
+        }
+      }
+      return false;
+    };
+    if (!assign(0)) return {};
+
+    const out = {};
+    Object.keys(map).forEach((l) => (out[l] = computeStandings(map[l])[2].name));
+    return out;
+  };
+  // One R32 slot label -> real team name, or null if not decided yet
+  const resolveR32 = (label, thirdMap) => {
+    const gm = label.match(/Group ([A-L])$/);
+    if (gm && (label.startsWith("Winner") || label.startsWith("Runner-up"))) {
+      const g = gm[1];
+      if (!groupFinished(g)) return null;
+      const rows = computeStandings(g);
+      return label.startsWith("Winner") ? rows[0].name : rows[1].name;
+    }
+    if (label.startsWith("3rd Place")) return thirdMap[label] || null;
+    return null; // "Winner Match N" (inner rounds) handled separately
+  };
+  // Render a knockout slot: flag + team if known, else the placeholder label
+  const koSlot = (label, thirdMap) => {
+    const team = resolveR32(label, thirdMap);
+    if (!team) return <span style={{ color: "var(--text-dim)", fontWeight: 700 }}>{label}</span>;
+    const flag = teamFlag(team);
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        {flag && <img src={flag} alt="" style={{ width: 26, height: 18, borderRadius: 3, objectFit: "cover" }} />}
+        <span style={{ fontWeight: 800 }}>{team}</span>
+      </span>
+    );
+  };
+  // ---- Knockout bracket (tree view) — inline styles (no globals.css dependency) ----
+  const KO_LINE = "rgba(212,175,55,0.4)"; // connector color
+  const allKoById = () => {
+    const all = {};
+    Object.values(knockoutData).forEach((arr) => arr.forEach((m) => (all[m.t] = m)));
+    if (!all[104]) all[104] = { t: 104, d: "20/07", g: "02:00", h: "Winner Match 101", a: "Winner Match 102" };
+    return all;
+  };
+  const feederId = (label) => {
+    const mm = label.match(/Match (\d+)/);
+    return mm ? parseInt(mm[1], 10) : null;
+  };
+  const koRoundTitle = (id) => {
+    if (id <= 88) return "Round of 32";
+    if (id <= 96) return "Round of 16";
+    if (id <= 100) return "Quarter-finals";
+    if (id <= 102) return "Semi-finals";
+    return "Final";
+  };
+  const bracketColumns = () => {
+    const all = allKoById();
+    const order = {};
+    const walk = (id, depth) => {
+      const mm = all[id];
+      if (!order[depth]) order[depth] = [];
+      if (!mm) { order[depth].push(id); return; }
+      const lh = feederId(mm.h), la = feederId(mm.a);
+      const hasKids = (lh && all[lh]) || (la && all[la]);
+      if (hasKids) {
+        if (lh && all[lh]) walk(lh, depth + 1);
+        if (la && all[la]) walk(la, depth + 1);
+      }
+      order[depth].push(id);
+    };
+    walk(104, 0);
+    return Object.keys(order)
+      .map(Number)
+      .sort((a, b) => b - a)
+      .map((d) => ({ title: koRoundTitle(all[order[d][0]].t), matches: order[d].map((id) => all[id]) }));
+  };
+  const bracketSlot = (label, thirdMap) => {
+    const team = resolveR32(label, thirdMap);
+    if (!team)
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 22, height: 14, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 11 }}>⬡</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", lineHeight: 1.15 }}>{label}</span>
+        </div>
+      );
+    const flag = teamFlag(team);
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {flag ? <img src={flag} alt="" style={{ width: 22, height: 14, borderRadius: 2, objectFit: "cover", flex: "none" }} /> : <span style={{ width: 22, height: 14, flex: "none" }} />}
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", textTransform: "uppercase", lineHeight: 1.15 }}>{team}</span>
+      </div>
+    );
+  };
+  const bracketCard = (m, hasIncoming, isLastCol, thirdMap) => (
+    <div key={m.t} style={{ position: "relative", background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", borderRadius: 14, padding: "10px 12px", minHeight: 78, display: "flex", flexDirection: "column", justifyContent: "center", gap: 7 }}>
+      {hasIncoming && <div style={{ position: "absolute", right: "100%", top: "50%", width: 18, height: 2, background: KO_LINE }} />}
+      {!isLastCol && <div style={{ position: "absolute", left: "100%", top: "50%", width: 16, height: 2, background: KO_LINE }} />}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "var(--gold)", fontSize: 13, fontWeight: 800 }}>#{m.t}</span>
+        <span style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 600 }}>{fmtDate(m.d)}</span>
+      </div>
+      {bracketSlot(m.h, thirdMap)}
+      {bracketSlot(m.a, thirdMap)}
+    </div>
+  );
+  const bracketColumn = (col, isLastCol, isFirstCol, thirdMap) => {
+    let body;
+    if (isLastCol) {
+      body = (
+        <div style={{ position: "relative", display: "flex", flexDirection: "column", justifyContent: "space-around", flex: 1 }}>
+          {bracketCard(col.matches[0], !isFirstCol, true, thirdMap)}
+        </div>
+      );
+    } else {
+      const pairs = [];
+      for (let i = 0; i < col.matches.length; i += 2) {
+        pairs.push(
+          <div key={i} style={{ position: "relative", display: "flex", flexDirection: "column", justifyContent: "space-around", flex: 1 }}>
+            <div style={{ position: "absolute", left: "calc(100% + 16px)", top: "25%", bottom: "25%", width: 2, background: KO_LINE }} />
+            <div style={{ position: "absolute", left: "calc(100% + 16px)", top: "50%", width: 18, height: 2, background: KO_LINE }} />
+            {bracketCard(col.matches[i], !isFirstCol, false, thirdMap)}
+            {bracketCard(col.matches[i + 1], !isFirstCol, false, thirdMap)}
+          </div>
+        );
+      }
+      body = pairs;
+    }
+    return (
+      <div key={col.title + "-" + col.matches[0].t} style={{ display: "flex", flexDirection: "column", width: 224, flex: "0 0 224px", padding: "0 18px" }}>
+        <div style={{ color: "var(--gold)", fontSize: 14, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center", marginBottom: 16 }}>{col.title}</div>
+        <div style={{ height: 1340, display: "flex", flexDirection: "column" }}>{body}</div>
+      </div>
+    );
+  };
+  const renderKnockoutBracket = () => {
+    const thirdMap = buildThirdMap();
+    const cols = bracketColumns();
+    return (
+      <div style={{ overflowX: "auto", width: "100%", paddingBottom: 8 }}>
+        <div style={{ display: "flex", minWidth: 1180, padding: "8px 0" }}>
+          {cols.map((col, i) => bracketColumn(col, i === cols.length - 1, i === 0, thirdMap))}
+        </div>
+      </div>
+    );
   };
   const getTeamMatches = (teamName) => {
     const res = [];
@@ -1097,31 +1275,60 @@ export default function Home() {
                 </button>
               ))}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
-              {groupTeams[activeGroup].map((t, i) => {
-                const picked = groupPicks[activeGroup] === t.n;
-                return (
-                  <div key={i} className={`team-card lg-glass ${picked ? "picked" : ""}`} onClick={() => pickGroupWinner(activeGroup, t.n)}>
-                    <img
-                      src={flagUrl(t.c, 160)}
-                      alt={t.n}
-                      onClick={(e) => { e.stopPropagation(); setTeamPopup(t); }}
-                      style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", marginBottom: 14, border: "2px solid rgba(255,255,255,0.2)" }}
-                    />
-                    <span style={{ fontSize: 18, fontWeight: 800, textAlign: "center", marginBottom: 8 }}>{t.n}</span>
-                    {picked ? (
-                      <span style={{ fontSize: 11, fontWeight: 800, color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                        ★ Your Group Winner
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                        Pick to win Group {activeGroup}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            {(() => {
+              const groupDone = groupFinished(activeGroup);
+              const winnerName = groupDone ? computeStandings(activeGroup)[0]?.name : null;
+              const userPick = groupPicks[activeGroup];
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
+                  {groupTeams[activeGroup].map((t, i) => {
+                    const isWinner = groupDone && t.n === winnerName;
+                    const wasUserPick = userPick === t.n;
+                    const picked = !groupDone && wasUserPick; // before finish: highlight the user's pick
+                    const highlight = isWinner || picked;
+                    return (
+                      <div
+                        key={i}
+                        className={`team-card lg-glass ${highlight ? "picked" : ""}`}
+                        onClick={groupDone ? undefined : () => pickGroupWinner(activeGroup, t.n)}
+                        style={groupDone ? { cursor: "default" } : undefined}
+                      >
+                        <img
+                          src={flagUrl(t.c, 160)}
+                          alt={t.n}
+                          onClick={(e) => { e.stopPropagation(); setTeamPopup(t); }}
+                          style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", marginBottom: 14, border: "2px solid rgba(255,255,255,0.2)", cursor: "pointer" }}
+                        />
+                        <span style={{ fontSize: 18, fontWeight: 800, textAlign: "center", marginBottom: 8 }}>{t.n}</span>
+                        {groupDone ? (
+                          isWinner ? (
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                              ★ Winner Group {activeGroup}{wasUserPick ? " · You nailed it ✓" : ""}
+                            </span>
+                          ) : wasUserPick ? (
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "#ff6b6b", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                              Your pick ✗
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", opacity: 0.5 }}>
+                              Group finished
+                            </span>
+                          )
+                        ) : picked ? (
+                          <span style={{ fontSize: 11, fontWeight: 800, color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                            ★ Your Group Winner
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                            Pick to win Group {activeGroup}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* ===== STANDINGS TABLE ===== */}
             {(() => {
@@ -1195,32 +1402,48 @@ export default function Home() {
         {page === "knockout" && (
           <section className="fade-up">
             <h1 className="worldcup-font page-title" style={{ marginBottom: 6 }}>Knockout Stage</h1>
-            <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 24 }}>
+            <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 20 }}>
               The road to the final. July 20, 2026. All times UTC.
             </p>
-            <div className="pill-row" style={{ justifyContent: "flex-start", marginBottom: 28 }}>
-              {Object.keys(knockoutData).map((phase) => (
-                <button key={phase} className={`pill ${activeKnockout === phase ? "active" : ""}`} onClick={() => setActiveKnockout(phase)}>
-                  {phase}
-                </button>
-              ))}
+
+            {/* View toggle */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+              <button className="pill" onClick={() => setKoView("list")} style={{ background: koView === "list" ? "var(--gold)" : "rgba(255,255,255,0.05)", color: koView === "list" ? "#0b0e16" : "var(--text-dim)", borderColor: koView === "list" ? "var(--gold)" : "var(--glass-border)" }}>☰ List</button>
+              <button className="pill" onClick={() => setKoView("bracket")} style={{ background: koView === "bracket" ? "var(--gold)" : "rgba(255,255,255,0.05)", color: koView === "bracket" ? "#0b0e16" : "var(--text-dim)", borderColor: koView === "bracket" ? "var(--gold)" : "var(--glass-border)" }}>🗺️ Bracket</button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {knockoutData[activeKnockout].map((m, i) => (
-                <div key={i} className="lg-glass" style={{ borderRadius: 20, padding: "18px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-                  <div style={{ minWidth: 80 }}>
-                    <span className="worldcup-font" style={{ color: "var(--gold)", fontSize: 22, display: "block" }}>#{m.t}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 700 }}>{fmtDate(m.d)}</span>
-                  </div>
-                  <div style={{ flex: 1, textAlign: "center", fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 12, paddingRight: 12, gap: 12, flexWrap: "wrap" }}>
-                    <span>{m.h}</span>
-                    <span style={{ color: "var(--text-dim)", fontSize: 12 }}>vs</span>
-                    <span>{m.a}</span>
-                  </div>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text-dim)", minWidth: 130, textAlign: "right" }}>{utcLabel(m.d, m.g)}</span>
+
+            {koView === "list" && (
+              <>
+                <div className="pill-row" style={{ justifyContent: "flex-start", marginBottom: 28 }}>
+                  {Object.keys(knockoutData).map((phase) => (
+                    <button key={phase} className={`pill ${activeKnockout === phase ? "active" : ""}`} onClick={() => setActiveKnockout(phase)}>
+                      {phase}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {(() => {
+                    const thirdMap = buildThirdMap();
+                    return knockoutData[activeKnockout].map((m, i) => (
+                      <div key={i} className="lg-glass" style={{ borderRadius: 20, padding: "18px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+                        <div style={{ minWidth: 80 }}>
+                          <span className="worldcup-font" style={{ color: "var(--gold)", fontSize: 22, display: "block" }}>#{m.t}</span>
+                          <span style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 700 }}>{fmtDate(m.d)}</span>
+                        </div>
+                        <div style={{ flex: 1, textAlign: "center", fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 12, paddingRight: 12, gap: 12, flexWrap: "wrap" }}>
+                          {koSlot(m.h, thirdMap)}
+                          <span style={{ color: "var(--text-dim)", fontSize: 12 }}>vs</span>
+                          {koSlot(m.a, thirdMap)}
+                        </div>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text-dim)", minWidth: 130, textAlign: "right" }}>{utcLabel(m.d, m.g)}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </>
+            )}
+
+            {koView === "bracket" && renderKnockoutBracket()}
           </section>
         )}
 
