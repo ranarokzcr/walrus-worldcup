@@ -590,6 +590,25 @@ export default function Home() {
     showWalrus("ref_whistle", lines[Math.floor(Math.random() * lines.length)]);
   };
 
+  // ---- Knockout pick (Round of 32) — stored in the SAME matchPicks → same Walrus sync.
+  // Knockout time is m.g (m.t is the match number), so lock on m.g.
+  const pickKnockout = (m, choice) => {
+    if (isLocked(m.d, m.g)) {
+      showWalrus("ref_whistle", `Too late! That tie has kicked off — the whistle has blown.`);
+      return;
+    }
+    const id = matchId(m, m.d);
+    const prev = matchPicks[id];
+    const next = { ...matchPicks, [id]: choice };
+    setMatchPicks(next);
+    localStorage.setItem("wc_match_picks", JSON.stringify(next));
+    if (prev && prev !== choice) {
+      showWalrus("laugh", `Switching your Round of 32 pick already? The clipboard remembers EVERYTHING.`);
+      return;
+    }
+    showWalrus("ref_whistle", `Locked in. Let's see if you can read a knockout tie.`);
+  };
+
   // ---- Group winner pick ----
   const setScore = (id, side, value) => {
     const v = value === "" ? "" : Math.max(0, Math.min(20, parseInt(value) || 0));
@@ -1424,7 +1443,14 @@ export default function Home() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {(() => {
                     const thirdMap = buildThirdMap();
-                    return knockoutData[activeKnockout].map((m, i) => (
+                    return knockoutData[activeKnockout].map((m, i) => {
+                      const id = matchId(m, m.d);
+                      const pick = matchPicks[id];
+                      const locked = isLocked(m.d, m.g);
+                      const ht = resolveR32(m.h, thirdMap);
+                      const at = resolveR32(m.a, thirdMap);
+                      const canPick = activeKnockout === "Round of 32";
+                      return (
                       <div key={i} className="lg-glass" style={{ borderRadius: 20, padding: "18px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
                         <div style={{ minWidth: 80 }}>
                           <span className="worldcup-font" style={{ color: "var(--gold)", fontSize: 22, display: "block" }}>#{m.t}</span>
@@ -1435,9 +1461,35 @@ export default function Home() {
                           <span style={{ color: "var(--text-dim)", fontSize: 12 }}>vs</span>
                           {koSlot(m.a, thirdMap)}
                         </div>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text-dim)", minWidth: 130, textAlign: "right" }}>{utcLabel(m.d, m.g)}</span>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: locked ? "var(--gold)" : "var(--text-dim)", minWidth: 130, textAlign: "right" }}>{locked ? "🔒 Voting closed" : utcLabel(m.d, m.g)}</span>
+                        {canPick && (
+                          <div style={{ display: "flex", gap: 8, flexBasis: "100%", width: "100%" }}>
+                            <button disabled={locked} className={`vote-opt ${pick === "home" ? "selected" : ""}`} style={locked ? { cursor: "not-allowed" } : {}} onClick={() => pickKnockout(m, "home")}>
+                              {ht && ht.length <= 12 ? ht : "Home"} advances
+                            </button>
+                            <button disabled={locked} className={`vote-opt ${pick === "away" ? "selected" : ""}`} style={locked ? { cursor: "not-allowed" } : {}} onClick={() => pickKnockout(m, "away")}>
+                              {at && at.length <= 12 ? at : "Away"} advances
+                            </button>
+                          </div>
+                        )}
+                        {canPick && !locked && (() => {
+                          const sc = scorePicks[id];
+                          const saved = sc && sc.h !== "" && sc.a !== "";
+                          return (
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, flexBasis: "100%", width: "100%", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 700, marginRight: 2 }}>Score:</span>
+                              <input type="number" min="0" max="20" value={sc?.h ?? ""} onChange={(e) => setScore(id, "h", e.target.value)} placeholder="–" title={ht || m.h} style={{ width: 40, textAlign: "center", padding: "6px 4px", borderRadius: 8, border: "1px solid var(--glass-border)", background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: 14 }} />
+                              <span style={{ color: "var(--text-dim)", fontWeight: 800 }}>:</span>
+                              <input type="number" min="0" max="20" value={sc?.a ?? ""} onChange={(e) => setScore(id, "a", e.target.value)} placeholder="–" title={at || m.a} style={{ width: 40, textAlign: "center", padding: "6px 4px", borderRadius: 8, border: "1px solid var(--glass-border)", background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: 14 }} />
+                              <button onClick={() => saved && confirmScore(id, { ...m, h: ht || m.h, a: at || m.a })} disabled={!saved} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: saved ? "#D4AF37" : "rgba(255,255,255,0.1)", color: saved ? "#1a1200" : "var(--text-dim)", fontWeight: 800, fontSize: 12, cursor: saved ? "pointer" : "default" }}>
+                                {confirmedScores[id] ? "Saved ✓" : "Save"}
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </div>
-                    ));
+                      );
+                    });
                   })()}
                 </div>
               </>
@@ -1550,7 +1602,15 @@ export default function Home() {
         })()}
         
         {/* ===== MY PREDICTIONS ===== */}
-        {page === "predictions" && (
+        {page === "predictions" && (() => {
+          const koThirdMap = buildThirdMap();
+          const koIdToMatch = {};
+          Object.values(knockoutData).forEach((arr) =>
+            arr.forEach((mm) => { koIdToMatch[`${mm.d}_${mm.h}_${mm.a}`] = mm; })
+          );
+          const groupEntries = Object.entries(matchPicks).filter(([id]) => !koIdToMatch[id]);
+          const koEntries = Object.entries(matchPicks).filter(([id]) => koIdToMatch[id]);
+          return (
           <section className="fade-up">
             <h1 className="worldcup-font page-title" style={{ marginBottom: 6 }}>My Predictions</h1>
             <p style={{ color: "var(--text-dim)", fontSize: 14, marginBottom: 28 }}>
@@ -1582,14 +1642,14 @@ export default function Home() {
               </div>
             )}
 
-            <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: "var(--gold)" }}>Match Predictions</h2>
-            {Object.keys(matchPicks).length === 0 ? (
+            <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: "var(--gold)" }}>Group Stage Predictions</h2>
+            {groupEntries.length === 0 ? (
               <div className="lg-glass" style={{ borderRadius: 18, padding: 24, color: "var(--text-dim)", fontSize: 14 }}>
-                No match predictions yet. Head to the Matches tab.
+                No group-stage predictions yet. Head to the Matches tab.
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {Object.entries(matchPicks).map(([id, choice]) => {
+                {groupEntries.map(([id, choice]) => {
                   const [day, home, away] = id.split("_");
                   const label = choice === "draw" ? "Draw" : choice === "home" ? `${home} Win` : `${away} Win`;
                   const s = findScore({ h: home, a: away });
@@ -1642,8 +1702,82 @@ export default function Home() {
                 })}
               </div>
             )}
+
+            <h2 style={{ fontSize: 16, fontWeight: 800, margin: "32px 0 14px", color: "var(--gold)" }}>Knockout Predictions</h2>
+            {koEntries.length === 0 ? (
+              <div className="lg-glass" style={{ borderRadius: 18, padding: 24, color: "var(--text-dim)", fontSize: 14 }}>
+                No knockout picks yet. Head to Knockout → Round of 32.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {koEntries
+                  .map(([id, choice]) => ({ id, choice, m: koIdToMatch[id] }))
+                  .sort((a, b) => a.m.t - b.m.t)
+                  .map(({ id, choice, m }) => {
+                    const ht = resolveR32(m.h, koThirdMap);
+                    const at = resolveR32(m.a, koThirdMap);
+                    const homeName = ht || m.h;
+                    const awayName = at || m.a;
+                    const pickedName = choice === "home" ? (ht || "Home") : (at || "Away");
+                    const s = ht && at ? findScore({ h: ht, a: at }) : null;
+                    const finished = s && s.status === "FINISHED";
+                    let verdict = null;
+                    if (finished && s.goalsHome !== s.goalsAway) {
+                      const actual = s.goalsHome > s.goalsAway ? "home" : "away";
+                      verdict = actual === choice;
+                    }
+                    const myScore = scorePicks[id];
+                    const hasScore = myScore && myScore.h !== "" && myScore.a !== "";
+                    const exact = hasScore && finished
+                      ? Number(myScore.h) === s.goalsHome && Number(myScore.a) === s.goalsAway
+                      : null;
+                    return (
+                      <div key={id} className="lg-glass" style={{ borderRadius: 16, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 220px", minWidth: 180 }}>
+                          <span style={{ fontSize: 11, color: "var(--gold)", fontWeight: 800, minWidth: 42 }}>#{m.t}</span>
+                          <span style={{ fontSize: 14, fontWeight: 700 }}>{homeName} vs {awayName}</span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: 160, flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, color: "var(--text-dim)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Your pick</span>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: "var(--gold)" }}>{pickedName} advances{hasScore ? ` · ${myScore.h}-${myScore.a}` : ""}</span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, width: 150, flexShrink: 0 }}>
+                          {finished ? (
+                            s.goalsHome === s.goalsAway ? (
+                              <>
+                                <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 700 }}>
+                                  Result: <span style={{ color: "var(--text)", fontWeight: 800 }}>{s.goalsHome}-{s.goalsAway}</span>
+                                </span>
+                                <span style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 700, fontStyle: "italic" }}>decided on penalties</span>
+                              </>
+                            ) : (() => {
+                              const hit = verdict === true;
+                              const bg = hit ? "rgba(57,255,20,0.12)" : "rgba(255,77,77,0.12)";
+                              const bd = hit ? "rgba(57,255,20,0.5)" : "#ff4d4d";
+                              const col = hit ? "#39ff14" : "#ff4d4d";
+                              return (
+                                <>
+                                  <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 700 }}>
+                                    Result: <span style={{ color: "var(--text)", fontWeight: 800 }}>{s.goalsHome}-{s.goalsAway}</span>
+                                  </span>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: col, background: bg, border: `1px solid ${bd}`, borderRadius: 999, padding: "3px 10px" }}>
+                                    {hit ? (exact === true ? "✓ Exact score!" : "✓ Correct") : "✗ Wrong"}
+                                  </span>
+                                </>
+                              );
+                            })()
+                          ) : (
+                            <span style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 600, fontStyle: "italic" }}>Not played yet</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </section>
-        )}
+          );
+        })()}
       
       </main>
       {/* ---------- FOOTER ---------- */}
